@@ -13,7 +13,7 @@ APP_ID = "1089"
 GITHUB_TOKEN = ''
 GITHUB_REPO  = ''
 GITHUB_BRANCH = "main"
-print(f"TOKEN OK: {bool(os.environ.get('GITHUB_TOKEN'))}")
+print(f"TOKEN OK: {os.environ.get('GITHUB_TOKEN')}")
 print(f"TOKEN OK: {bool(os.environ.get('GITHUB_REPO'))}")
 datos = []
 ultimo_proceso = 0
