@@ -108,15 +108,27 @@ def cargar_datos():
     contenido = cargar_de_github('datos_historicos.csv')
     if contenido:
         import io
-        df = pd.read_csv(io.BytesIO(contenido))
-        df.to_csv('datos_historicos.csv', index=False)
-        print(f"✓ {len(df)} velas cargadas desde GitHub")
-        return df.to_dict('records')
+        try:
+            df = pd.read_csv(io.BytesIO(contenido))
+            if len(df) == 0 or df.empty:
+                print("⚠️ CSV vacío, empezando desde cero")
+                return []
+            df.to_csv('datos_historicos.csv', index=False)
+            print(f"✓ {len(df)} velas cargadas desde GitHub")
+            return df.to_dict('records')
+        except Exception:
+            print("⚠️ CSV sin datos válidos, empezando desde cero")
+            return []
     # Si no, cargar desde disco
     if os.path.exists('datos_historicos.csv'):
-        df = pd.read_csv('datos_historicos.csv')
-        print(f"✓ {len(df)} velas cargadas desde disco")
-        return df.to_dict('records')
+        try:
+            df = pd.read_csv('datos_historicos.csv')
+            if len(df) == 0 or df.empty:
+                return []
+            print(f"✓ {len(df)} velas cargadas desde disco")
+            return df.to_dict('records')
+        except Exception:
+            return []
     return []
 
 # ── Indicadores ───────────────────────────────────────────
