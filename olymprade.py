@@ -9,6 +9,10 @@ import requests
 from sklearn.ensemble import RandomForestClassifier
 import numpy as np
 
+print("DEBUG VARS:")
+print(f"TOKEN: {bool(os.environ.get('GITHUB_TOKEN'))}")
+print(f"REPO: {os.environ.get('GITHUB_REPO')}")
+
 APP_ID = "1089"
 TOKEN = "pat_d3e12c0b31bf7aea505196cc944a0c8d9679d14bb7b138a0645ef0a6f069d2d2"
 datos = []
