@@ -8,7 +8,7 @@ from sklearn.ensemble import RandomForestClassifier
 import numpy as np
 
 APP_ID = "1089"
-TOKEN = ""
+TOKEN = "pat_d3e12c0b31bf7aea505196cc944a0c8d9679d14bb7b138a0645ef0a6f069d2d2"
 datos = []
 ultimo_proceso = 0
 INTERVALO = 1020
