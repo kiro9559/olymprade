@@ -22,30 +22,12 @@ GITHUB_REPO  = os.environ.get('GITHUB_REPO', '')  # "kiro9559/olymprade"
 GITHUB_BRANCH = "main"
 
 def guardar_en_github(filepath, contenido_bytes, mensaje):
+    print(f"🔄 Intentando guardar {filepath} en GitHub...")
+    print(f"TOKEN existe: {bool(GITHUB_TOKEN)}")
+    print(f"REPO: {GITHUB_REPO}")
     if not GITHUB_TOKEN or not GITHUB_REPO:
+        print("⚠️ Faltan variables de entorno")
         return
-    try:
-        url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{filepath}"
-        headers = {
-            "Authorization": f"token {GITHUB_TOKEN}",
-            "Accept": "application/vnd.github.v3+json"
-        }
-        # Obtener SHA si existe
-        r = requests.get(url, headers=headers)
-        sha = r.json().get('sha') if r.status_code == 200 else None
-
-        data = {
-            "message": mensaje,
-            "content": base64.b64encode(contenido_bytes).decode(),
-            "branch": GITHUB_BRANCH
-        }
-        if sha:
-            data["sha"] = sha
-
-        requests.put(url, headers=headers, json=data)
-        print(f"✓ {filepath} guardado en GitHub")
-    except Exception as e:
-        print(f"⚠️ Error guardando en GitHub: {e}")
 
 def cargar_de_github(filepath):
     if not GITHUB_TOKEN or not GITHUB_REPO:
