@@ -9,34 +9,41 @@ import requests
 from sklearn.ensemble import RandomForestClassifier
 import numpy as np
 
-
-print("DEBUG VARS:")
-print(f"TOKEN: {bool(os.environ.get('GITHUB_TOKEN'))}")
-print(f"REPO: {os.environ.get('GITHUB_REPO')}")
-
 APP_ID = "1089"
-TOKEN = "pat_d3e12c0b31bf7aea505196cc944a0c8d9679d14bb7b138a0645ef0a6f069d2d2"
+GITHUB_TOKEN = ''
+GITHUB_REPO  = ''
+GITHUB_BRANCH = "main"
+print(f"TOKEN OK: {bool(os.environ.get('GITHUB_TOKEN'))}")
+print(f"TOKEN OK: {bool(os.environ.get('GITHUB_REPO'))}")
 datos = []
 ultimo_proceso = 0
 INTERVALO = 15
 modelo = None
 
-# ── GitHub Config ─────────────────────────────────────────
-GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN', '')
-GITHUB_REPO  = os.environ.get('GITHUB_REPO', '')  # "kiro9559/olymprade"
-GITHUB_BRANCH = "main"
+# ── GitHub ────────────────────────────────────────────────
 
 def guardar_en_github(filepath, contenido_bytes, mensaje):
-    print(f"🔄 Intentando guardar {filepath} en GitHub...")
-    print(f"TOKEN existe: {bool(GITHUB_TOKEN)}")
-    print(f"REPO: {GITHUB_REPO}")
-    if not GITHUB_TOKEN or not GITHUB_REPO:
-        print("⚠️ Faltan variables de entorno")
-        return
+    try:
+        url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{filepath}"
+        headers = {
+            "Authorization": f"token {GITHUB_TOKEN}",
+            "Accept": "application/vnd.github.v3+json"
+        }
+        r = requests.get(url, headers=headers)
+        sha = r.json().get('sha') if r.status_code == 200 else None
+        data = {
+            "message": mensaje,
+            "content": base64.b64encode(contenido_bytes).decode(),
+            "branch": GITHUB_BRANCH
+        }
+        if sha:
+            data["sha"] = sha
+        requests.put(url, headers=headers, json=data)
+        print(f"✓ {filepath} guardado en GitHub")
+    except Exception as e:
+        print(f"⚠️ Error GitHub: {e}")
 
 def cargar_de_github(filepath):
-    if not GITHUB_TOKEN or not GITHUB_REPO:
-        return None
     try:
         url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{filepath}"
         headers = {
@@ -45,11 +52,9 @@ def cargar_de_github(filepath):
         }
         r = requests.get(url, headers=headers)
         if r.status_code == 200:
-            contenido = base64.b64decode(r.json()['content'])
-            print(f"✓ {filepath} cargado desde GitHub")
-            return contenido
+            return base64.b64decode(r.json()['content'])
     except Exception as e:
-        print(f"⚠️ Error cargando de GitHub: {e}")
+        print(f"⚠️ Error cargando GitHub: {e}")
     return None
 
 # ── Persistencia ──────────────────────────────────────────
@@ -58,11 +63,10 @@ def guardar_modelo(m):
     import io
     buf = io.BytesIO()
     pickle.dump(m, buf)
-    buf.seek(0)
-    contenido = buf.read()
+    contenido = buf.getvalue()
     with open('modelo_ia.pkl', 'wb') as f:
         f.write(contenido)
-    guardar_en_github('modelo_ia.pkl', contenido, '🤖 Update modelo IA')
+    guardar_en_github('modelo_ia.pkl', contenido, '🤖 Update modelo')
     print("✓ Modelo guardado")
 
 def cargar_modelo():
@@ -73,24 +77,22 @@ def cargar_modelo():
             m = pickle.load(io.BytesIO(contenido))
             print("✓ Modelo cargado desde GitHub")
             return m
-        except Exception as e:
-            print(f"⚠️ Modelo corrupto en GitHub: {e}")
+        except Exception:
+            pass
     if os.path.exists('modelo_ia.pkl'):
         try:
             with open('modelo_ia.pkl', 'rb') as f:
-                m = pickle.load(f)
-            print("✓ Modelo cargado desde disco")
-            return m
-        except Exception as e:
-            print(f"⚠️ Modelo corrupto en disco: {e}")
-    print("⚠️ No hay modelo guardado, empezando desde cero")
+                return pickle.load(f)
+        except Exception:
+            pass
+    print("⚠️ Sin modelo previo, empezando desde cero")
     return None
 
 def guardar_datos(df):
     contenido = df.to_csv(index=False).encode()
     with open('datos_historicos.csv', 'wb') as f:
         f.write(contenido)
-    guardar_en_github('datos_historicos.csv', contenido, '📊 Update datos históricos')
+    guardar_en_github('datos_historicos.csv', contenido, '📊 Update datos')
     print("✓ Datos guardados")
 
 def cargar_datos():
@@ -99,33 +101,19 @@ def cargar_datos():
         import io
         try:
             df = pd.read_csv(io.BytesIO(contenido))
-            if df.empty or len(df.columns) == 0:
-                return []
-            print(f"✓ {len(df)} velas cargadas desde GitHub")
-            return df.to_dict('records')
-        except Exception as e:
-            print(f"⚠️ Error leyendo CSV: {e}")
-            return []
+            if not df.empty:
+                print(f"✓ {len(df)} velas cargadas desde GitHub")
+                return df.to_dict('records')
+        except Exception:
+            pass
     if os.path.exists('datos_historicos.csv'):
         try:
             df = pd.read_csv('datos_historicos.csv')
-            if df.empty:
-                return []
-            print(f"✓ {len(df)} velas cargadas desde disco")
-            return df.to_dict('records')
+            if not df.empty:
+                print(f"✓ {len(df)} velas cargadas desde disco")
+                return df.to_dict('records')
         except Exception:
-            return []
-    return []
-    # Si no, cargar desde disco
-    if os.path.exists('datos_historicos.csv'):
-        try:
-            df = pd.read_csv('datos_historicos.csv')
-            if len(df) == 0 or df.empty:
-                return []
-            print(f"✓ {len(df)} velas cargadas desde disco")
-            return df.to_dict('records')
-        except Exception:
-            return []
+            pass
     return []
 
 # ── Indicadores ───────────────────────────────────────────
@@ -133,24 +121,21 @@ def cargar_datos():
 def calcular_rsi(serie, periodo=14):
     delta = serie.diff()
     ganancia = delta.where(delta > 0, 0).rolling(periodo).mean()
-    perdida = (-delta.where(delta < 0, 0)).rolling(periodo).mean()
-    rs = ganancia / perdida
-    return 100 - (100 / (1 + rs))
+    perdida  = (-delta.where(delta < 0, 0)).rolling(periodo).mean()
+    return 100 - (100 / (1 + ganancia / perdida))
 
 def agregar_indicadores(df):
-    df['media_7']  = df['close'].rolling(7).mean()
-    df['media_20'] = df['close'].rolling(20).mean()
-    df['rsi'] = calcular_rsi(df['close'])
+    df['media_7']       = df['close'].rolling(7).mean()
+    df['media_20']      = df['close'].rolling(20).mean()
+    df['rsi']           = calcular_rsi(df['close'])
     df['donchian_alto'] = df['high'].rolling(15).max()
     df['donchian_bajo'] = df['low'].rolling(15).min()
-    df['donchian_medio'] = (df['donchian_alto'] + df['donchian_bajo']) / 2
-    df['momentum']    = df['close'].pct_change(5)
-    df['volatilidad'] = df['close'].rolling(10).std()
-    df['rango']       = df['high'] - df['low']
-    df['pos_canal'] = (df['close'] - df['donchian_bajo']) / (
-        df['donchian_alto'] - df['donchian_bajo'] + 0.0001
-    )
-    df['cruce_media'] = (df['media_7'] - df['media_20'])
+    df['donchian_medio']= (df['donchian_alto'] + df['donchian_bajo']) / 2
+    df['momentum']      = df['close'].pct_change(5)
+    df['volatilidad']   = df['close'].rolling(10).std()
+    df['rango']         = df['high'] - df['low']
+    df['pos_canal']     = (df['close'] - df['donchian_bajo']) / (df['donchian_alto'] - df['donchian_bajo'] + 0.0001)
+    df['cruce_media']   = df['media_7'] - df['media_20']
     return df
 
 # ── IA ────────────────────────────────────────────────────
@@ -170,13 +155,10 @@ def preparar_datos(df):
     df = df.dropna().reset_index(drop=True)
     if len(df) < 2:
         return None, None
-    X = df[FEATURES].values[:-1]
-    y = df['direccion'].values[1:]
-    return X, y
+    return df[FEATURES].values[:-1], df['direccion'].values[1:]
 
 def entrenar_modelo(df):
     if len(df) < 30:
-        print("⚠️ Pocos datos para entrenar")
         return None
     X, y = preparar_datos(df)
     if X is None:
@@ -192,21 +174,16 @@ def entrenar_modelo(df):
     return m
 
 def predecir(m, df):
-    df = agregar_indicadores(df.copy())
-    df = df.dropna().reset_index(drop=True)
-    if len(df) == 0:
+    df = agregar_indicadores(df.copy()).dropna().reset_index(drop=True)
+    if df.empty:
         return
-    ultima = df.iloc[-1]
-    X = np.array([[ultima[f] for f in FEATURES]])
+    X = np.array([[df.iloc[-1][f] for f in FEATURES]])
     pred  = m.predict(X)[0]
     proba = m.predict_proba(X)[0]
-    clases = m.classes_
-    proba_dict = {c: p for c, p in zip(clases, proba)}
-    direcciones = {0: '🔴 Baja', 1: '🟡 Lateral', 2: '🟢 Sube'}
-    print(f"\n📊 Predicción: {direcciones[pred]}")
-    print(f"🔴 Baja: {proba_dict.get(0,0)*100:.0f}% | "
-          f"🟡 Lateral: {proba_dict.get(1,0)*100:.0f}% | "
-          f"🟢 Sube: {proba_dict.get(2,0)*100:.0f}%\n")
+    proba_dict = {c: p for c, p in zip(m.classes_, proba)}
+    dirs = {0: '🔴 Baja', 1: '🟡 Lateral', 2: '🟢 Sube'}
+    print(f"\n📊 Predicción: {dirs[pred]}")
+    print(f"🔴 Baja: {proba_dict.get(0,0)*100:.0f}% | 🟡 Lateral: {proba_dict.get(1,0)*100:.0f}% | 🟢 Sube: {proba_dict.get(2,0)*100:.0f}%\n")
 
 # ── WebSocket ─────────────────────────────────────────────
 
@@ -215,7 +192,6 @@ def on_message(ws, message):
     data = json.loads(message)
 
     if data.get('msg_type') == 'ping':
-        print("✓ Ping OK - solicitando velas...")
         ws.send(json.dumps({
             "ticks_history": "1HZ100V",
             "style": "candles",
@@ -250,8 +226,6 @@ def on_message(ws, message):
         datos = df.to_dict('records')
 
         print(f"✓ Velas totales: {len(df)}")
-        print(df.tail(3))
-
         guardar_datos(df)
 
         if len(df) >= 30:
@@ -261,15 +235,15 @@ def on_message(ws, message):
                 predecir(modelo, df)
 
 def on_error(ws, error):
-    print("Error:", error)
+    print(f"Error: {error}")
 
-def on_close(ws, close_status, close_msg):
-    print("Conexión cerrada — datos y modelo guardados en disco")
+def on_close(ws, *args):
+    print("Conexión cerrada")
 
 def on_open(ws):
     global ultimo_proceso, datos, modelo
     ultimo_proceso = 0
-    datos = cargar_datos()
+    datos  = cargar_datos()
     modelo = cargar_modelo()
     print("✓ Conectado!")
     ws.send(json.dumps({"ping": 1}))
@@ -278,16 +252,14 @@ def on_open(ws):
 
 while True:
     try:
-        ws = websocket.WebSocketApp(
+        websocket.WebSocketApp(
             f"wss://ws.derivws.com/websockets/v3?app_id={APP_ID}",
             on_message=on_message,
             on_error=on_error,
             on_close=on_close,
             on_open=on_open
-        )
-        ws.run_forever()
+        ).run_forever()
     except Exception as e:
-        print(f"Error inesperado: {e}")
-
+        print(f"Error: {e}")
     print("🔄 Reconectando en 5 segundos...")
     time.sleep(5)
