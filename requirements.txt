@@ -2,3 +2,4 @@ websocket-client
 pandas
 scikit-learn
 numpy
+requests
