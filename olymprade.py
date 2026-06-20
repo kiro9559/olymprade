@@ -9,6 +9,7 @@ import requests
 from sklearn.ensemble import RandomForestClassifier
 import numpy as np
 
+
 print("DEBUG VARS:")
 print(f"TOKEN: {bool(os.environ.get('GITHUB_TOKEN'))}")
 print(f"REPO: {os.environ.get('GITHUB_REPO')}")
