@@ -79,20 +79,23 @@ def guardar_modelo(m):
     print("✓ Modelo guardado")
 
 def cargar_modelo():
-    # Intentar cargar desde GitHub primero
     contenido = cargar_de_github('modelo_ia.pkl')
     if contenido:
         import io
-        m = pickle.load(io.BytesIO(contenido))
-        with open('modelo_ia.pkl', 'wb') as f:
-            f.write(contenido)
-        return m
-    # Si no, cargar desde disco
+        try:
+            m = pickle.load(io.BytesIO(contenido))
+            print("✓ Modelo cargado desde GitHub")
+            return m
+        except Exception as e:
+            print(f"⚠️ Modelo corrupto en GitHub: {e}")
     if os.path.exists('modelo_ia.pkl'):
-        with open('modelo_ia.pkl', 'rb') as f:
-            m = pickle.load(f)
-        print("✓ Modelo cargado desde disco")
-        return m
+        try:
+            with open('modelo_ia.pkl', 'rb') as f:
+                m = pickle.load(f)
+            print("✓ Modelo cargado desde disco")
+            return m
+        except Exception as e:
+            print(f"⚠️ Modelo corrupto en disco: {e}")
     print("⚠️ No hay modelo guardado, empezando desde cero")
     return None
 
