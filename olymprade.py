@@ -4,6 +4,8 @@ import time
 import pandas as pd
 import pickle
 import os
+import base64
+import requests
 from sklearn.ensemble import RandomForestClassifier
 import numpy as np
 
@@ -14,14 +16,78 @@ ultimo_proceso = 0
 INTERVALO = 15
 modelo = None
 
+# ── GitHub Config ─────────────────────────────────────────
+GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN', '')
+GITHUB_REPO  = os.environ.get('GITHUB_REPO', '')  # "kiro9559/olymprade"
+GITHUB_BRANCH = "main"
+
+def guardar_en_github(filepath, contenido_bytes, mensaje):
+    if not GITHUB_TOKEN or not GITHUB_REPO:
+        return
+    try:
+        url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{filepath}"
+        headers = {
+            "Authorization": f"token {GITHUB_TOKEN}",
+            "Accept": "application/vnd.github.v3+json"
+        }
+        # Obtener SHA si existe
+        r = requests.get(url, headers=headers)
+        sha = r.json().get('sha') if r.status_code == 200 else None
+
+        data = {
+            "message": mensaje,
+            "content": base64.b64encode(contenido_bytes).decode(),
+            "branch": GITHUB_BRANCH
+        }
+        if sha:
+            data["sha"] = sha
+
+        requests.put(url, headers=headers, json=data)
+        print(f"✓ {filepath} guardado en GitHub")
+    except Exception as e:
+        print(f"⚠️ Error guardando en GitHub: {e}")
+
+def cargar_de_github(filepath):
+    if not GITHUB_TOKEN or not GITHUB_REPO:
+        return None
+    try:
+        url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{filepath}"
+        headers = {
+            "Authorization": f"token {GITHUB_TOKEN}",
+            "Accept": "application/vnd.github.v3+json"
+        }
+        r = requests.get(url, headers=headers)
+        if r.status_code == 200:
+            contenido = base64.b64decode(r.json()['content'])
+            print(f"✓ {filepath} cargado desde GitHub")
+            return contenido
+    except Exception as e:
+        print(f"⚠️ Error cargando de GitHub: {e}")
+    return None
+
 # ── Persistencia ──────────────────────────────────────────
 
 def guardar_modelo(m):
+    import io
+    buf = io.BytesIO()
+    pickle.dump(m, buf)
+    buf.seek(0)
+    contenido = buf.read()
     with open('modelo_ia.pkl', 'wb') as f:
-        pickle.dump(m, f)
+        f.write(contenido)
+    guardar_en_github('modelo_ia.pkl', contenido, '🤖 Update modelo IA')
     print("✓ Modelo guardado")
 
 def cargar_modelo():
+    # Intentar cargar desde GitHub primero
+    contenido = cargar_de_github('modelo_ia.pkl')
+    if contenido:
+        import io
+        m = pickle.load(io.BytesIO(contenido))
+        with open('modelo_ia.pkl', 'wb') as f:
+            f.write(contenido)
+        return m
+    # Si no, cargar desde disco
     if os.path.exists('modelo_ia.pkl'):
         with open('modelo_ia.pkl', 'rb') as f:
             m = pickle.load(f)
@@ -31,10 +97,22 @@ def cargar_modelo():
     return None
 
 def guardar_datos(df):
-    df.to_csv('datos_historicos.csv', index=False)
+    contenido = df.to_csv(index=False).encode()
+    with open('datos_historicos.csv', 'wb') as f:
+        f.write(contenido)
+    guardar_en_github('datos_historicos.csv', contenido, '📊 Update datos históricos')
     print("✓ Datos guardados")
 
 def cargar_datos():
+    # Intentar cargar desde GitHub primero
+    contenido = cargar_de_github('datos_historicos.csv')
+    if contenido:
+        import io
+        df = pd.read_csv(io.BytesIO(contenido))
+        df.to_csv('datos_historicos.csv', index=False)
+        print(f"✓ {len(df)} velas cargadas desde GitHub")
+        return df.to_dict('records')
+    # Si no, cargar desde disco
     if os.path.exists('datos_historicos.csv'):
         df = pd.read_csv('datos_historicos.csv')
         print(f"✓ {len(df)} velas cargadas desde disco")
@@ -51,31 +129,19 @@ def calcular_rsi(serie, periodo=14):
     return 100 - (100 / (1 + rs))
 
 def agregar_indicadores(df):
-    # Medias móviles
     df['media_7']  = df['close'].rolling(7).mean()
     df['media_20'] = df['close'].rolling(20).mean()
-
-    # RSI
     df['rsi'] = calcular_rsi(df['close'])
-
-    # Donchian Channel
     df['donchian_alto'] = df['high'].rolling(15).max()
     df['donchian_bajo'] = df['low'].rolling(15).min()
     df['donchian_medio'] = (df['donchian_alto'] + df['donchian_bajo']) / 2
-
-    # Momentum y volatilidad
     df['momentum']    = df['close'].pct_change(5)
     df['volatilidad'] = df['close'].rolling(10).std()
     df['rango']       = df['high'] - df['low']
-
-    # Posición dentro del canal Donchian
     df['pos_canal'] = (df['close'] - df['donchian_bajo']) / (
         df['donchian_alto'] - df['donchian_bajo'] + 0.0001
     )
-
-    # Cruce de medias
     df['cruce_media'] = (df['media_7'] - df['media_20'])
-
     return df
 
 # ── IA ────────────────────────────────────────────────────
